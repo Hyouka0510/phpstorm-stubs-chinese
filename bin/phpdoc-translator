@@ -1,0 +1,130 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use IdePhpdocChinese\PhpstormStubsChinese\TranslatorService;
+
+/**
+ * Console command for PHP documentation translation
+ */
+class TranslatorCommand
+{
+    private const DEFAULT_RAW_DIR = 'resources/php-chunked-xhtml';
+    private const DEFAULT_ANNOTATION_DIR = 'resources/annotation';
+    private const DEFAULT_STUBS_DIR = 'resources/phpstorm-stubs';
+    private const DEFAULT_OUTPUT_DIR = 'resources/library';
+
+    public function run(array $argv): void
+    {
+        $this->printHeader();
+
+        if (in_array('--help', $argv) || in_array('-h', $argv)) {
+            $this->printHelp();
+            return;
+        }
+
+        if (in_array('--version', $argv) || in_array('-v', $argv)) {
+            $this->printVersion();
+            return;
+        }
+
+        $options = $this->parseOptions($argv);
+        foreach ($options as $key => $value) {
+            if (strpos($key, '-dir') !== false && !is_dir($value)) {
+                mkdir($value, 0755, true);
+            }
+        }
+        try {
+            $translator = new TranslatorService(
+                $options['raw-dir'],
+                $options['annotation-dir'],
+                $options['stubs-dir'],
+                $options['output-dir']
+            );
+
+            if ($options['parse-only']) {
+                echo "Running parser only...\n";
+                $translator->parseHtml();
+            } elseif ($options['attach-only']) {
+                echo "Running attached only...\n";
+                $translator->attachComments();
+            } else {
+                echo "Running complete translation...\n";
+                $translator->translate();
+            }
+
+        } catch (Exception $e) {
+            echo "Error: " . $e->getMessage() . "\n";
+            exit(1);
+        }
+    }
+
+    private function parseOptions(array $argv): array
+    {
+        $options = [
+            'raw-dir'        => self::DEFAULT_RAW_DIR,
+            'annotation-dir' => self::DEFAULT_ANNOTATION_DIR,
+            'stubs-dir'      => self::DEFAULT_STUBS_DIR,
+            'output-dir'     => self::DEFAULT_OUTPUT_DIR,
+            'parse-only'     => false,
+            'attach-only'    => false,
+        ];
+
+        for ($i = 1; $i < count($argv); $i++) {
+            $arg = $argv[$i];
+            if (strpos($arg, '--') === 0) {
+                $key = substr($arg, 2);
+                if (in_array($key, ['parse-only', 'attach-only'])) {
+                    $options[$key] = true;
+                } elseif (isset($argv[$i + 1]) && strpos($argv[$i + 1], '--') !== 0) {
+                    $options[$key] = $argv[$i + 1];
+                    $i++; // Skip next argument as it's the value
+                }
+            }
+        }
+        return $options;
+    }
+
+    private function printHeader(): void
+    {
+        echo "PHP Documentation Translator v1.0.0\n";
+        echo "====================================\n\n";
+    }
+
+    private function printHelp(): void
+    {
+        echo "Usage: phpdoc-translator [options]\n\n";
+        echo "Options:\n";
+        echo "  --raw-dir <path>        Path to raw HTML documentation directory\n";
+        echo "                          (default: " . self::DEFAULT_RAW_DIR . ")\n";
+        echo "  --annotation-dir <path> Path to annotation directory for processed files\n";
+        echo "                          (default: " . self::DEFAULT_ANNOTATION_DIR . ")\n";
+        echo "  --stubs-dir <path>      Path to PhpStorm stubs directory\n";
+        echo "                          (default: " . self::DEFAULT_STUBS_DIR . ")\n";
+        echo "  --output-dir <path>     Path to library result directory\n";
+        echo "                          (default: " . self::DEFAULT_OUTPUT_DIR . ")\n";
+        echo "  --parse-only            Run parser only (skip comment attachment)\n";
+        echo "  --attach-only           Run attached only (skip HTML parsing)\n";
+        echo "  -h, --help              Show this help message\n";
+        echo "  -v, --version           Show version information\n\n";
+        echo "Examples:\n";
+        echo "  phpdoc-translator\n";
+        echo "  phpdoc-translator --raw-dir /path/to/html --stubs-dir /path/to/stubs\n";
+        echo "  phpdoc-translator --parse-only\n";
+        echo "  phpdoc-translator --attach-only\n";
+    }
+
+    private function printVersion(): void
+    {
+        echo "PHP Documentation Translator v1.0.0\n";
+        echo "Copyright (c) 2024 PHP Doc Translator\n";
+        echo "Licensed under the MIT License\n";
+    }
+}
+
+// Run the command
+$command = new TranslatorCommand();
+$command->run($argv);
