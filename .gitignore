@@ -1,0 +1,37 @@
+# Composer
+/vendor/
+composer.lock
+
+# IDE
+/.idea/
+/.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+/.phpunit.cache/
+/coverage/
+/var/
+
+# Resources data directories
+/resources/php-chunked-xhtml/
+/resources/annotation/
+/resources/phpstorm-stubs/
+/resources/library/
+
+# Logs
+*.log
+
+# Cache
+/cache/
+/tmp/
+/Tests/
+
+# Build artifacts
+/build/
+/dist/

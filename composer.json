@@ -1,0 +1,55 @@
+{
+  "name": "ide-phpdoc-chinese/phpstorm-stubs-chinese",
+  "description": "PHP Manual Chinese Translation Tool - Converts PHP documentation from HTML to Chinese comments for PhpStorm-stubs",
+  "type": "library",
+  "keywords": [
+    "php",
+    "documentation",
+    "Manual",
+    "translation",
+    "phpstorm",
+    "stubs"
+  ],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Phpstorm Stubs Chinese",
+      "email": "zengxf0510@outlook.com"
+    }
+  ],
+  "require": {
+    "php": "^7.4 || ^8.0",
+    "ext-dom": "*",
+    "ext-json": "*",
+    "ext-libxml": "*"
+  },
+  "require-dev": {
+    "ext-zip": "*",
+    "phpstan/phpstan": "^1.0",
+    "phpunit/phpunit": "^9.6",
+    "squizlabs/php_codesniffer": "^3.6"
+  },
+  "autoload": {
+    "psr-4": {
+      "IdePhpdocChinese\\PhpstormStubsChinese\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "IdePhpdocChinese\\PhpstormStubsChinese\\Tests\\": "tests/"
+    }
+  },
+  "bin": [
+    "bin/phpdoc-translator"
+  ],
+  "scripts": {
+    "build": "bin/phpdoc-translator",
+    "test": "phpunit"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
