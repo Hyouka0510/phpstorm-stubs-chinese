@@ -18,16 +18,16 @@
     }
   ],
   "require": {
-    "php": "^7.4 || ^8.0",
+    "php": "^8.1",
     "ext-dom": "*",
     "ext-json": "*",
     "ext-libxml": "*"
   },
   "require-dev": {
     "ext-zip": "*",
-    "phpstan/phpstan": "^1.0",
-    "phpunit/phpunit": "^9.6",
-    "squizlabs/php_codesniffer": "^3.6"
+    "phpstan/phpstan": "^1.10",
+    "phpunit/phpunit": "^10.0",
+    "squizlabs/php_codesniffer": "^3.7"
   },
   "autoload": {
     "psr-4": {
@@ -44,11 +44,16 @@
   ],
   "scripts": {
     "build": "bin/phpdoc-translator",
-    "test": "phpunit"
+    "test": "phpunit",
+    "analyse": "phpstan analyse src --level=max",
+    "format": "phpcbf src"
   },
   "config": {
     "optimize-autoloader": true,
-    "sort-packages": true
+    "sort-packages": true,
+    "allow-plugins": {
+      "phpstan/extension-installer": true
+    }
   },
   "minimum-stability": "stable",
   "prefer-stable": true

@@ -9,37 +9,36 @@ use IdePhpdocChinese\PhpstormStubsChinese\Exception\FileHelperException;
 /**
  * File Helper Utility
  */
-class FileHelper
+final class FileHelper
 {
     /**
      * Get all PHP files from a directory recursively
+     * @return array<string>
      * @throws FileHelperException
      */
     public static function getPhpFiles(string $directory, string $parent = ''): array
     {
         $files = [];
 
-        $handle = opendir($directory);
-        if (!$handle) {
-            throw new FileHelperException("Unable to open directory: $directory");
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::LEAVES_ONLY
+            );
+
+            foreach ($iterator as $file) {
+                /** @var \SplFileInfo $file */
+                if ($file->isFile()) {
+                    $normalizedDirectory = rtrim($directory, '/\\') . DIRECTORY_SEPARATOR;
+                    $relativePath        = str_replace($normalizedDirectory, '', $file->getPathname());
+                    $relativePath        = str_replace(DIRECTORY_SEPARATOR, '/', $relativePath);
+                    $files[]             = '/' . $relativePath;
+                }
+            }
+        } catch (\Exception $e) {
+            throw new FileHelperException("Unable to scan directory: $directory. Error: " . $e->getMessage());
         }
 
-        while (($file = readdir($handle)) !== false) {
-            if ($file === '.' || $file === '..') {
-                continue;
-            }
-
-            $fullPath = $directory . DIRECTORY_SEPARATOR . $file;
-            $relativePath = $parent . '/' . $file;
-
-            if (is_dir($fullPath)) {
-                $files = array_merge($files, self::getPhpFiles($fullPath, $relativePath));
-            } else {
-                $files[] = $relativePath;
-            }
-        }
-
-        closedir($handle);
         return $files;
     }
 
@@ -50,7 +49,7 @@ class FileHelper
     public static function ensureDirectory(string $directory): void
     {
         if (!is_dir($directory)) {
-            if (!mkdir($directory, 0755, true)) {
+            if (!mkdir($directory, 0755, true) && !is_dir($directory)) {
                 throw new FileHelperException("Unable to create directory: $directory");
             }
         }
@@ -61,8 +60,7 @@ class FileHelper
      */
     public static function getExtension(string $filename): string
     {
-        $pathInfo = pathinfo($filename);
-        return $pathInfo['extension'] ?? '';
+        return pathinfo($filename, PATHINFO_EXTENSION) ?? '';
     }
 
     /**
@@ -70,8 +68,7 @@ class FileHelper
      */
     public static function getFilenameWithoutExtension(string $filename): string
     {
-        $pathInfo = pathinfo($filename);
-        return $pathInfo['filename'];
+        return pathinfo($filename, PATHINFO_FILENAME) ?? '';
     }
 
     /**
@@ -117,8 +114,67 @@ class FileHelper
         $directory = dirname($filename);
         self::ensureDirectory($directory);
 
-        if (file_put_contents($filename, $content) === false) {
+        if (file_put_contents($filename, $content, LOCK_EX) === false) {
             throw new FileHelperException("Unable to write file: $filename");
+        }
+    }
+
+    /**
+     * Get file size in bytes
+     * @throws FileHelperException
+     */
+    public static function getFileSize(string $filename): int
+    {
+        if (!file_exists($filename)) {
+            throw new FileHelperException("File does not exist: $filename");
+        }
+
+        $size = filesize($filename);
+        if ($size === false) {
+            throw new FileHelperException("Unable to get file size: $filename");
+        }
+
+        return $size;
+    }
+
+    /**
+     * Check if file exists and is a regular file
+     */
+    public static function isFile(string $filename): bool
+    {
+        return is_file($filename);
+    }
+
+    /**
+     * Delete file safely
+     * @throws FileHelperException
+     */
+    public static function deleteFile(string $filename): void
+    {
+        if (!file_exists($filename)) {
+            return;
+        }
+
+        if (!unlink($filename)) {
+            throw new FileHelperException("Unable to delete file: $filename");
+        }
+    }
+
+    /**
+     * Copy file with error handling
+     * @throws FileHelperException
+     */
+    public static function copyFile(string $source, string $destination): void
+    {
+        if (!file_exists($source)) {
+            throw new FileHelperException("Source file does not exist: $source");
+        }
+
+        $directory = dirname($destination);
+        self::ensureDirectory($directory);
+
+        if (!copy($source, $destination)) {
+            throw new FileHelperException("Unable to copy file from $source to $destination");
         }
     }
 }

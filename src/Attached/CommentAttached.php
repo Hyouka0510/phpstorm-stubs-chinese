@@ -23,12 +23,11 @@ final class CommentAttached
     private const EXTENSION_PHP = 'php';
     private const INVALID_DIRECTORIES = ['\\', '/'];
 
-    private string $documentDir;
-    private string $stubsDir;
-    private string $outputDir;
-
-    public function __construct(string $documentDir, string $stubsDir, string $outputDir)
-    {
+    public function __construct(
+        private string $documentDir,
+        private string $stubsDir,
+        private string $outputDir
+    ) {
         $this->documentDir = $this->normalizePath($documentDir);
         $this->stubsDir    = $this->normalizePath($stubsDir);
         $this->outputDir   = $this->normalizePath($outputDir);
@@ -59,51 +58,51 @@ final class CommentAttached
     {
         $filePath = $this->stubsDir . $filename;
         $this->validateFileExists($filePath);
-        $handle = $this->openFileForReading($filePath);
-        try {
-            $newContent = $this->processFile($handle);
-            $this->saveProcessedFile($filename, $newContent);
-        } finally {
-            fclose($handle);
+
+        $content = file_get_contents($filePath);
+        if ($content === false) {
+            throw new AttachedException("Unable to read file: {$filePath}");
         }
+
+        $newContent = $this->processFileContent($content);
+        $this->saveProcessedFile($filename, $newContent);
     }
 
     /**
-     * Process the entire file and return new content with attached comments
-     *
-     * @param resource $handle File handle
-     * @return string Processed file content
+     * Process the entire file content and return new content with attached comments
      */
-    private function processFile($handle): string
+    private function processFileContent(string $content): string
     {
-        $newContent = '';
-        $comment    = '';
-        $className  = '';
-        while (($line = fgets($handle)) !== false) {
+        $lines     = explode(self::LINE_BREAK, $content);
+        $newLines  = [];
+        $comment   = '';
+        $className = '';
+
+        foreach ($lines as $line) {
             $trimmedLine = str_replace(' ', '', $line);
             // Handle comments
             if ($this->isComment($trimmedLine)) {
-                $comment .= $line;
+                $comment .= $line . self::LINE_BREAK;
                 continue;
             }
             // Process different types of declarations
             $newComment = $this->processDeclarations($line, $comment, $className);
 
             if ($newComment !== null) {
-                $newContent .= $newComment;
+                $newLines[] = rtrim($newComment, self::LINE_BREAK);
                 $comment    = '';
             }
 
             // Add any remaining comment
             if (!empty($comment)) {
-                $newContent .= $comment;
+                $newLines[] = rtrim($comment, self::LINE_BREAK);
                 $comment    = '';
             }
 
-            $newContent .= $line;
+            $newLines[] = $line;
         }
 
-        return $newContent;
+        return implode(self::LINE_BREAK, $newLines);
     }
 
     /**
@@ -158,7 +157,7 @@ final class CommentAttached
     {
         $fileInfo  = pathinfo($file);
         $extension = $fileInfo['extension'] ?? '';
-        $dirname = $fileInfo['dirname'] ?? '';
+        $dirname   = $fileInfo['dirname'] ?? '';
         return $extension === self::EXTENSION_PHP && !in_array($dirname, self::INVALID_DIRECTORIES, true);
     }
 
@@ -172,24 +171,6 @@ final class CommentAttached
         if (!file_exists($filePath)) {
             throw new AttachedException("File not found: {$filePath}");
         }
-    }
-
-    /**
-     * Open file for reading
-     *
-     * @param string $filePath
-     * @return resource
-     * @throws AttachedException
-     */
-    private function openFileForReading(string $filePath)
-    {
-        $handle = fopen($filePath, 'r');
-
-        if (!$handle) {
-            throw new AttachedException("Unable to open file: {$filePath}");
-        }
-
-        return $handle;
     }
 
     /**
@@ -226,13 +207,13 @@ final class CommentAttached
      */
     private function isComment(string $line): bool
     {
-        foreach (self::COMMENT_PREFIXES as $prefix) {
-            if (strpos($line, $prefix) === 0) {
-                return true;
-            }
-        }
-
-        return false;
+        return match (true) {
+            str_starts_with($line, '/*'),
+            str_starts_with($line, '*'),
+            str_starts_with($line, '*/'),
+            str_starts_with($line, '#') => true,
+            default => false
+        };
     }
 
     /**
@@ -259,13 +240,13 @@ final class CommentAttached
         $line   = str_replace(' ', '', $line);
         $prefix = "define('";
 
-        if (strpos($line, $prefix) === 0) {
-            $line  = str_replace($prefix, '', $line);
-            $parts = explode("'", $line);
-            return $parts[0] ?? null;
+        if (!str_starts_with($line, $prefix)) {
+            return null;
         }
 
-        return null;
+        $line  = str_replace($prefix, '', $line);
+        $parts = explode("'", $line);
+        return $parts[0] ?? null;
     }
 
     /**
@@ -275,13 +256,13 @@ final class CommentAttached
     {
         $line = str_replace(' ', '', $line);
 
-        if (strpos($line, '$') === 0) {
-            $line  = str_replace(['$', '_'], '', $line);
-            $parts = explode('=', $line);
-            return $parts[0] ?? null;
+        if (!str_starts_with($line, '$')) {
+            return null;
         }
 
-        return null;
+        $line  = str_replace(['$', '_'], '', $line);
+        $parts = explode('=', $line);
+        return $parts[0] ?? null;
     }
 
     /**
@@ -310,10 +291,9 @@ final class CommentAttached
      */
     private function normalizeFunction(string $function): string
     {
-        if (strpos($function, self::PS_UNRESERVE_PREFIX) === 0) {
-            return substr($function, strlen(self::PS_UNRESERVE_PREFIX));
-        }
-        return $function;
+        return str_starts_with($function, self::PS_UNRESERVE_PREFIX)
+            ? substr($function, strlen(self::PS_UNRESERVE_PREFIX))
+            : $function;
     }
 
     /**
@@ -321,7 +301,7 @@ final class CommentAttached
      */
     private function isMethodDeclaration(string $line, string $className): bool
     {
-        return strpos($line, ' ') === 0 && !empty($className);
+        return str_starts_with($line, ' ') && !empty($className);
     }
 
     /**
@@ -330,7 +310,7 @@ final class CommentAttached
     private function getComment(string $token, string $oldComment): string
     {
         // Don't replace underscores for constants
-        if (strpos($token, 'constant.') !== 0) {
+        if (!str_starts_with($token, 'constant.')) {
             $token = str_replace('_', '-', $token);
         }
 
@@ -344,35 +324,54 @@ final class CommentAttached
         if ($comment === false) {
             return $oldComment;
         }
-
+        // Process comment Unicode and $
+        $comment = $this->processCommentUnicode($comment);
         // Process old comment
-        $processedOldComment = $this->processOldComment($oldComment);
-
+        $processedOldComment = $this->processOldCommentUrls($oldComment);
         // Build new comment
         return $this->buildNewComment($comment, $processedOldComment);
     }
 
     /**
-     * Process existing comment by removing markers and updating URLs
+     * Process comment Unicode and $
      */
-    private function processOldComment(string $oldComment): string
+    private function processCommentUnicode(string $comment): string
+    {
+        if (empty($comment)) {
+            return '';
+        }
+        //echo $comment;die;
+        //&#36;
+        return str_replace(["\u{00A0}", "$"], ["&nbsp;", '\$'], $comment);
+    }
+
+    /**
+     * Process existing comment by updating URLs
+     */
+    private function processOldCommentUrls(string $oldComment): string
     {
         if (empty($oldComment)) {
             return '';
         }
-
-        // Remove /** and */
-        $oldComment = preg_replace('/(\/\*|\*\/)/', '', $oldComment);
-
         // Replace English manual links with Chinese
-        return preg_replace(self::MANUAL_URL_PATTERN, self::MANUAL_URL_REPLACEMENT, $oldComment);
+        return preg_replace(self::MANUAL_URL_PATTERN, self::MANUAL_URL_REPLACEMENT, $oldComment) ?? $oldComment;
     }
 
     /**
      * Build new comment block
+     * @throws AttachedException
      */
     private function buildNewComment(string $comment, string $oldComment): string
     {
-        return '/**' . self::LINE_BREAK . '* ' . $comment . self::LINE_BREAK . $oldComment . '*/' . self::LINE_BREAK;
+        $pattern = '/(\/\*\*)\s*(\n|\r\n|\r)/';
+        if (preg_match($pattern, $oldComment, $matches, PREG_OFFSET_CAPTURE)) {
+            $matchStart              = $matches[0][1] ?? 0;
+            $matchLength             = strlen($matches[0][0] ?? '');
+            $insertPosition          = $matchStart + $matchLength;
+            $contentToAddWithNewline = " * " . rtrim($comment) . self::LINE_BREAK . " * " . self::LINE_BREAK;
+            return substr_replace($oldComment, $contentToAddWithNewline, $insertPosition, 0);
+        } else {
+            return "/**" . self::LINE_BREAK . " * " . rtrim($comment) . self::LINE_BREAK . " */" . self::LINE_BREAK;
+        }
     }
 }
