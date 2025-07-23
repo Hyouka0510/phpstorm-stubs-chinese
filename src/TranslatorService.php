@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace IdePhpdocChinese\PhpstormStubsChinese;
 
 use Exception;
+use FilesystemIterator;
 use IdePhpdocChinese\PhpstormStubsChinese\Attached\CommentAttached;
 use IdePhpdocChinese\PhpstormStubsChinese\Exception\AttachedException;
 use IdePhpdocChinese\PhpstormStubsChinese\Exception\FileHelperException;
@@ -15,19 +16,14 @@ use IdePhpdocChinese\PhpstormStubsChinese\Util\FileHelper;
 /**
  * Main translator service
  */
-class TranslatorService
+final class TranslatorService
 {
-    private string $rawHtmlDir;
-    private string $annotationDir;
-    private string $stubsDir;
-    private string $outputDir;
-
-    public function __construct(string $rawHtmlDir, string $annotationDir, string $stubsDir, string $outputDir)
-    {
-        $this->rawHtmlDir    = rtrim($rawHtmlDir, '/\\') . DIRECTORY_SEPARATOR;
-        $this->annotationDir = rtrim($annotationDir, '/\\') . DIRECTORY_SEPARATOR;
-        $this->stubsDir      = rtrim($stubsDir, '/\\') . DIRECTORY_SEPARATOR;
-        $this->outputDir     = rtrim($outputDir, '/\\') . DIRECTORY_SEPARATOR;
+    public function __construct(
+        private readonly string $rawHtmlDir,
+        private readonly string $annotationDir,
+        private readonly string $stubsDir,
+        private readonly string $outputDir
+    ) {
     }
 
     /**
@@ -48,9 +44,9 @@ class TranslatorService
      */
     public function parseHtml(): void
     {
-        $this->removeDirectory($this->annotationDir);
-        FileHelper::ensureDirectory($this->annotationDir);
-        $parser = new HtmlParser($this->rawHtmlDir, $this->annotationDir);
+        $this->removeDirectory($this->getNormalizedAnnotationDir());
+        FileHelper::ensureDirectory($this->getNormalizedAnnotationDir());
+        $parser = new HtmlParser($this->getNormalizedRawHtmlDir(), $this->getNormalizedAnnotationDir());
         $parser->parseAll();
     }
 
@@ -60,46 +56,13 @@ class TranslatorService
      */
     public function attachComments(): void
     {
-        $this->removeDirectory($this->outputDir);
-        $attached = new CommentAttached($this->annotationDir, $this->stubsDir, $this->outputDir);
+        $this->removeDirectory($this->getNormalizedOutputDir());
+        $attached = new CommentAttached(
+            $this->getNormalizedAnnotationDir(),
+            $this->getNormalizedStubsDir(),
+            $this->getNormalizedOutputDir()
+        );
         $attached->attachAll();
-    }
-
-
-    /**
-     * Set raw HTML directory
-     */
-    public function setRawHtmlDir(string $rawHtmlDir): self
-    {
-        $this->rawHtmlDir = rtrim($rawHtmlDir, '/\\') . DIRECTORY_SEPARATOR;
-        return $this;
-    }
-
-    /**
-     * Set temporary directory
-     */
-    public function setAnnotationDir(string $annotationDir): self
-    {
-        $this->annotationDir = rtrim($annotationDir, '/\\') . DIRECTORY_SEPARATOR;
-        return $this;
-    }
-
-    /**
-     * Set stubs directory
-     */
-    public function setStubsDir(string $stubsDir): self
-    {
-        $this->stubsDir = rtrim($stubsDir, '/\\') . DIRECTORY_SEPARATOR;
-        return $this;
-    }
-
-    /**
-     * Set output directory
-     */
-    public function setOutputDir(string $outputDir): self
-    {
-        $this->outputDir = rtrim($outputDir, '/\\') . DIRECTORY_SEPARATOR;
-        return $this;
     }
 
     /**
@@ -111,7 +74,7 @@ class TranslatorService
     }
 
     /**
-     * Get temporary directory
+     * Get annotation directory
      */
     public function getAnnotationDir(): string
     {
@@ -134,20 +97,60 @@ class TranslatorService
         return $this->outputDir;
     }
 
+    /**
+     * Get normalized raw HTML directory path
+     */
+    private function getNormalizedRawHtmlDir(): string
+    {
+        return rtrim($this->rawHtmlDir, '/\\') . DIRECTORY_SEPARATOR;
+    }
+
+    /**
+     * Get normalized annotation directory path
+     */
+    private function getNormalizedAnnotationDir(): string
+    {
+        return rtrim($this->annotationDir, '/\\') . DIRECTORY_SEPARATOR;
+    }
+
+    /**
+     * Get normalized stubs directory path
+     */
+    private function getNormalizedStubsDir(): string
+    {
+        return rtrim($this->stubsDir, '/\\') . DIRECTORY_SEPARATOR;
+    }
+
+    /**
+     * Get normalized output directory path
+     */
+    private function getNormalizedOutputDir(): string
+    {
+        return rtrim($this->outputDir, '/\\') . DIRECTORY_SEPARATOR;
+    }
+
+    /**
+     * Remove directory and all its contents recursively
+     */
     private function removeDirectory(string $dir): void
     {
         if (!is_dir($dir)) {
             return;
         }
-        $files = array_diff(scandir($dir), ['.', '..']);
-        foreach ($files as $file) {
-            $path = $dir . DIRECTORY_SEPARATOR . $file;
-            if (is_dir($path)) {
-                $this->removeDirectory($path);
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+
+        foreach ($iterator as $file) {
+            if ($file->isDir()) {
+                rmdir($file->getPathname());
             } else {
-                unlink($path);
+                unlink($file->getPathname());
             }
         }
+
         rmdir($dir);
     }
 }

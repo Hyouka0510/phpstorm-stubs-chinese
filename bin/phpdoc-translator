@@ -10,7 +10,7 @@ use IdePhpdocChinese\PhpstormStubsChinese\TranslatorService;
 /**
  * Console command for PHP documentation translation
  */
-class TranslatorCommand
+final class TranslatorCommand
 {
     private const DEFAULT_RAW_DIR = 'resources/php-chunked-xhtml';
     private const DEFAULT_ANNOTATION_DIR = 'resources/annotation';
@@ -75,7 +75,7 @@ class TranslatorCommand
 
         for ($i = 1; $i < count($argv); $i++) {
             $arg = $argv[$i];
-            if (strpos($arg, '--') === 0) {
+            if (str_starts_with($arg, '--')) {
                 $key = substr($arg, 2);
                 if (in_array($key, ['parse-only', 'attach-only'])) {
                     $options[$key] = true;
