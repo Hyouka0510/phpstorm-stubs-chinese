@@ -57,12 +57,9 @@ jobs:
       - name: Execute PHP Project Build Command # 执行您的 PHP 项目构建命令
         run: composer build
 
-      # --- 步骤四: 打包并输出构建结果 ---
-      - name: Package Build Result # 打包构建结果
-        run: zip -r build-library.zip resources/library # 将 library 目录打包成 zip 文件
-
+      # --- 步骤四: 输出构建结果 ---
       - name: Upload Build library # 上传构建产物
         uses: actions/upload-artifact@v4
         with:
           name: phpstorm-stubs-chinese # 产物的名称
-          path: build-library.zip # 要上传的文件路径
+          path: resources/library # 要上传的文件路径
