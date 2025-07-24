@@ -1,0 +1,68 @@
+name: Phpstorm Stubs Chinese Build Workflow # 工作流的名称
+
+on:
+  push:
+    branches:
+      - main # 当代码推送到 main 分支时触发
+  pull_request:
+    branches:
+      - main # 当向 main 分支发起拉取请求时触发
+  schedule:
+    - cron: '0 0 * * *' #定时构建，每天零时执行
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # 在最新的 Ubuntu 环境上运行
+
+    steps:
+      - name: Checkout repository # 检出您的 GitHub 仓库代码
+        uses: actions/checkout@v4
+
+      - name: Setup PHP # 设置 PHP 环境
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1' # 请替换为您项目所需的 PHP 版本，例如 '7.4', '8.1', '8.2'
+          extensions: dom, libxml, xmlreader, sqlite3 # 安装常用的 PHP 扩展，xml 扩展可能被 phd 需要
+
+      - name: Install Composer dependencies # 安装您项目自身的 Composer 依赖
+        run: composer install --no-dev --prefer-dist
+
+      - name: Create resources directory # 创建 resources 目录，用于存放外部资源
+        run:
+          mkdir -p resources
+          mkdir -p php-doc
+
+      - name: Clone php/phd and php/doc-base  # 克隆 php/phd 和 php/doc-base 仓库
+        run: |
+          git clone https://github.com/php/phd php-doc/phd
+          git clone https://github.com/php/doc-base php-doc/doc-base
+
+      - name: Clone php/doc-en and php/doc-zh # 克隆 php/doc-zh 和 php/doc-zh 仓库
+        run: |
+          git clone https://github.com/php/doc-en php-doc/en
+          git clone https://github.com/php/doc-zh php-doc/zh
+
+      - name: Build php-chunked-xhtml with Chinese translation # 构建包含中文翻译的 php-chunked-xhtml 文档
+        working-directory: php-doc # 在 php/doc-base 目录下执行命令
+        run: |
+          php doc-base/configure.php --with-lang=zh
+          php phd/render.php --docbook doc-base/.manual.xml --package PHP --format xhtml
+          cp -r output/php-chunked-xhtml/* ../resources/php-chunked-xhtml/ # 复制构建结果
+
+      # --- 步骤二: 克隆 JetBrains/phpstorm-stubs ---
+      - name: Clone JetBrains/phpstorm-stubs # 克隆 JetBrains/phpstorm-stubs 仓库
+        run: git clone https://github.com/JetBrains/phpstorm-stubs resources/phpstorm-stubs
+
+      # --- 步骤三: 执行您的 PHP 项目的构建命令 ---
+      - name: Execute PHP Project Build Command # 执行您的 PHP 项目构建命令
+        run: composer build
+
+      # --- 步骤四: 打包并输出构建结果 ---
+      - name: Package Build Result # 打包构建结果
+        run: zip -r build-library.zip resources/library # 将 library 目录打包成 zip 文件
+
+      - name: Upload Build library # 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpstorm-stubs-chinese # 产物的名称
+          path: build-library.zip # 要上传的文件路径
