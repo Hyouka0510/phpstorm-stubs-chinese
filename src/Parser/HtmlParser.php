@@ -17,10 +17,9 @@ final class HtmlParser
     private const SITE_URL = 'https://php.net/manual/zh/';
     private const LINE_BREAK = "\r\n";
 
-    public function __construct(
-        private readonly string $inputDir,
-        private readonly string $outputDir
-    ) {
+    public function __construct(private readonly string $inputDir, private readonly string $outputDir)
+    {
+
     }
 
     /**
@@ -74,9 +73,6 @@ final class HtmlParser
      */
     public function parseFile(string $filename): void
     {
-        if ($filename != 'allowdynamicproperties.construct.html') {
-            //return;
-        }
         $content = $this->loadContent($filename);
         $name    = pathinfo($filename, PATHINFO_FILENAME);
 
@@ -337,9 +333,9 @@ final class HtmlParser
 
             $preContent = $preElement->textContent;
             if (!empty($preContent)) {
-                $fragment   = $context->ownerDocument->createDocumentFragment();
-                $newContent = str_replace(["\n", " "], ["<br>", "&nbsp;"], $preContent);
-                $newContent = "<div>$newContent</div>";
+                $fragment = $context->ownerDocument->createDocumentFragment();
+                $newContent = str_replace(["\r\n", "\n", " "], ["<br>", "<br>", "&nbsp;"], $preContent);
+                $newContent = sprintf('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div>%s</div></body></html>', $newContent);
                 $tempDom    = new DOMDocument();
                 @$tempDom->loadHTML($newContent, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 
@@ -421,7 +417,7 @@ final class HtmlParser
             $abbrContent = $abbrElement->textContent;
             if (!empty($abbrContent)) {
                 $fragment   = $context->ownerDocument->createDocumentFragment();
-                $newContent = "<div>$abbrContent</div>";
+                $newContent = sprintf('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div>%s</div></body></html>', $abbrContent);
                 $tempDom    = new DOMDocument();
                 @$tempDom->loadHTML($newContent, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
                 $divElement = $tempDom->getElementsByTagName('div')->item(0);

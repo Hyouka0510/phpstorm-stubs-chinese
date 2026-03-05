@@ -14,7 +14,7 @@ Generate and output the modified phpstorm-stubs project to a specified folder fo
 - **PSR-4 Autoloading**: Follows modern PHP standards and best practices
 - **Command Line Interface**: Easy-to-use console commands
 - **Error Handling**: Comprehensive exception handling with meaningful error messages
-- **PHP 7.4+ Compatible**: Supports PHP 7.4 and later versions
+- **Compatible with PHP 8.1+**: Supports PHP 8.1 and later versions
 
 ## Installation
 
@@ -45,7 +45,7 @@ The package provides a console command for easy usage:
 vendor/bin/phpdoc-translator
 
 # Run with custom directories
-vendor/bin/phpdoc-translator --raw-dir /resource/php-chunked-xhtml --stubs-dir /resource/phpstorm-stubs
+vendor/bin/phpdoc-translator --raw-dir /resources/php-chunked-xhtml --stubs-dir /resources/phpstorm-stubs
 
 # Run parser only
 vendor/bin/phpdoc-translator --parse-only
@@ -68,10 +68,10 @@ use IdePhpdocChinese\PhpstormStubsChinese\TranslatorService;
 
 // Initialize the translator service
 $translator = new TranslatorService(
-    'resource/php-chunked-xhtml',  // Raw HTML directory
-    'resource/annotation',         // Temporary annotation directory
-    'resource/phpstorm-stubs'      // PhpStorm stubs directory
-    'resource/library'             // Build library directory
+    'resources/php-chunked-xhtml',  // Raw HTML directory
+    'resources/annotation',         // Temporary annotation directory
+    'resources/phpstorm-stubs',      // PhpStorm stubs directory
+    'resources/library'             // Build library directory
 );
 
 // Run complete translation
@@ -116,7 +116,7 @@ project/
 ├── bin/
 │   └── phpdoc-translator
 ├── tests/
-├── resource/
+├── resources/
 │   ├── php-chunked-xhtml/    # Raw HTML documentation
 │   ├── annotation/           # Temporary annotation files
 │   ├── phpstorm-stubs/       # PhpStorm stub files
@@ -129,16 +129,16 @@ project/
 
 The package uses the following default directories:
 
-- **Raw HTML Directory**: `resource/php-chunked-xhtml/`
-- **Temporary Directory**: `resource/annotation/`
-- **PhpStorm Stubs Directory**: `resource/phpstorm-stubs/`
-- **Build Library Directory**: `resource/library/`
+- **Raw HTML Directory**: `resources/php-chunked-xhtml/`
+- **Temporary Directory**: `resources/annotation/`
+- **PhpStorm Stubs Directory**: `resources/phpstorm-stubs/`
+- **Build Library Directory**: `resources/library/`
 
 You can customize these directories using command line options or by configuring the `TranslatorService` programmatically.
 
 ## Requirements
 
-- PHP 7.4 or higher
+- PHP 8.1 or higher
 - ext-dom extension
 - ext-json extension
 - Composer for dependency management
@@ -158,6 +158,10 @@ composer test
 ```
 
 ## Changelog
+
+### v1.1.0
+
+- Fixed newline handling and document fragment creation garbled characters in the HTML parser
 
 ### v1.0.0
 

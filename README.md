@@ -13,7 +13,7 @@
 - **PSR-4 自动加载**：遵循现代 PHP 标准和最佳实践
 - **命令行界面**：易于使用的控制台命令
 - **错误处理**：全面的异常处理，提供有意义的错误消息
-- **兼容 PHP 7.4+**：支持 PHP 7.4 及更高版本
+- **兼容 PHP 8.1+**：支持 PHP 8.1 及更高版本
 
 ## 安装
 
@@ -44,7 +44,7 @@ composer require phpdoc/translator
 vendor/bin/phpdoc-translator
 
 # 使用自定义目录运行
-vendor/bin/phpdoc-translator --raw-dir /resource/php-chunked-xhtml --stubs-dir /resource/phpstorm-stubs
+vendor/bin/phpdoc-translator --raw-dir /resources/php-chunked-xhtml --stubs-dir /resources/phpstorm-stubs
 
 # 仅运行解析器
 vendor/bin/phpdoc-translator --parse-only
@@ -67,10 +67,10 @@ use IdePhpdocChinese\PhpstormStubsChinese\TranslatorService;
 
 // 初始化翻译服务
 $translator = new TranslatorService(
-    'resource/php-chunked-xhtml',  // 原始 HTML 目录
-    'resource/annotation',         // 临时注释目录
-    'resource/phpstorm-stubs'      // PhpStorm 存根目录
-    'resource/library'             // 构建库目录
+    'resources/php-chunked-xhtml',  // 原始 HTML 目录
+    'resources/annotation',         // 临时注释目录
+    'resources/phpstorm-stubs',      // PhpStorm 存根目录
+    'resources/library'             // 构建库目录
 );
 
 // 运行完整翻译
@@ -115,7 +115,7 @@ project/
 ├── bin/
 │   └── phpdoc-translator
 ├── tests/
-├── resource/
+├── resources/
 │   ├── php-chunked-xhtml/    # 原始 HTML 文档
 │   ├── annotation/           # 临时注释文件
 │   ├── phpstorm-stubs/       # PhpStorm 存根文件
@@ -128,16 +128,16 @@ project/
 
 该包使用以下默认目录：
 
-- **原始 HTML 目录**：`resource/php-chunked-xhtml/`
-- **临时目录**：`resource/annotation/`
-- **PhpStorm 存根目录**：`resource/phpstorm-stubs/`
-- **构建库目录**：`resource/library/`
+- **原始 HTML 目录**：`resources/php-chunked-xhtml/`
+- **临时目录**：`resources/annotation/`
+- **PhpStorm 存根目录**：`resources/phpstorm-stubs/`
+- **构建库目录**：`resources/library/`
 
 您可以通过命令行选项或通过编程方式配置 `TranslatorService` 来自定义这些目录。
 
 ## 要求
 
-- PHP 7.4 或更高版本
+- PHP 8.1 或更高版本
 - ext-dom 扩展
 - ext-json 扩展
 - Composer 用于依赖管理
@@ -157,6 +157,10 @@ composer test
 ```
 
 ## 更新日志
+
+### v1.1.0
+
+- 修复HTML解析器中的换行符处理和文档片段创建乱码
 
 ### v1.0.0
 
