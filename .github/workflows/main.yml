@@ -9,6 +9,7 @@ on:
       - main # 当向 main 分支发起拉取请求时触发
   schedule:
     - cron: '0 0 * * *' #定时构建，每天零时执行
+  workflow_dispatch:
 
 jobs:
   build:
