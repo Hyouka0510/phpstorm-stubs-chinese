@@ -1,63 +1,123 @@
-# PhpstormStubs Chinese
+# PhpStorm Stubs Chinese
 
-Download the HTML [Chinese manual](https://www.php.net/download-docs.php) from the official PHP website, extract and categorize the content for core elements such as classes, functions, and constants, and save them as separate annotation
-files.
+PhpStorm Stubs Chinese is a build tool for generating PHP stub files with Chinese documentation comments.
 
-Integrate the annotation content into the corresponding class, function, and constant declarations in the phpstorm-stubs project.
-
-Generate and output the modified phpstorm-stubs project to a specified folder for use in building the [php-chinese-manual-plugin](https://github.com/Hyouka0510/php-chinese-manual-plugin).
+The project builds the Chinese PHP manual as `php-chunked-xhtml`, extracts documentation fragments for classes, methods, functions, constants, and predefined variables, then inserts those fragments into the matching declarations from JetBrains `phpstorm-stubs`. The generated library is written to `resources/library/` and can be consumed by [php-chinese-manual-plugin](https://github.com/Hyouka0510/php-chinese-manual-plugin) or other downstream build pipelines.
 
 ## Features
 
-- **HTML Parser**: Extracts PHP documentation from HTML files and converts them to structured data
-- **Comment Attached**: Attaches Chinese documentation comments to phpstorm-stubs
-- **PSR-4 Autoloading**: Follows modern PHP standards and best practices
-- **Command Line Interface**: Easy-to-use console commands
-- **Error Handling**: Comprehensive exception handling with meaningful error messages
-- **Compatible with PHP 8.1+**: Supports PHP 8.1 and later versions
+- Extract reusable annotation fragments from the Chinese PHP manual XHTML.
+- Attach Chinese comments to classes, methods, functions, constants, and superglobals in `phpstorm-stubs`.
+- Handle php.net manual filename conventions such as namespaces, magic methods, underscores, and case normalization.
+- Provide both a CLI entry point and a programmatic API.
+- Include PHPUnit, PHPStan, and PHPCS quality checks.
+
+## Requirements
+
+To run this project:
+
+- PHP `8.1` or later
+- Composer
+- PHP extensions: `dom`, `json`, `libxml`
+
+To generate `resources/php-chunked-xhtml/` from the PHP documentation sources:
+
+- Git
+- PHP extensions: `xmlreader`, `sqlite3`
+- GitHub access for cloning `php/phd`, `php/doc-base`, `php/doc-en`, `php/doc-zh`, and `JetBrains/phpstorm-stubs`
+
+For development and quality checks:
+
+- PHP extension: `zip`
+- `phpunit/phpunit`
+- `phpstan/phpstan`
+- `squizlabs/php_codesniffer`
+
+Development dependencies are installed by `composer install`.
 
 ## Installation
 
-Install the package via Composer:
-
 ```bash
-composer require phpdoc/translator
+git clone https://github.com/Hyouka0510/phpstorm-stubs-chinese.git
+cd phpstorm-stubs-chinese
+composer install
 ```
 
-Or add it to your `composer.json`:
-
-```json
-{
-  "require": {
-    "phpdoc/translator": "^1.0"
-  }
-}
-```
-
-## Usage
-
-### Command Line Interface
-
-The package provides a console command for easy usage:
+For CI or production-style builds:
 
 ```bash
-# Run complete translation process
-vendor/bin/phpdoc-translator
+composer install --no-dev --prefer-dist
+```
 
-# Run with custom directories
-vendor/bin/phpdoc-translator --raw-dir /resources/php-chunked-xhtml --stubs-dir /resources/phpstorm-stubs
+## Preparing Resources
 
-# Run parser only
-vendor/bin/phpdoc-translator --parse-only
+Large resource directories are not committed to the repository. Prepare these before running a build:
 
-# Run attached only
-vendor/bin/phpdoc-translator --attach-only
+- `resources/php-chunked-xhtml/`: Chinese PHP manual XHTML.
+- `resources/phpstorm-stubs/`: JetBrains `phpstorm-stubs` source tree.
+
+The GitHub Actions workflow in `.github/workflows/main.yml` prepares them with:
+
+```bash
+mkdir -p resources php-doc
+
+git clone https://github.com/php/phd php-doc/phd
+git clone https://github.com/php/doc-base php-doc/doc-base
+git clone https://github.com/php/doc-en php-doc/en
+git clone https://github.com/php/doc-zh php-doc/zh
+
+cd php-doc
+php doc-base/configure.php --with-lang=zh
+php phd/render.php --docbook doc-base/.manual.xml --package PHP --format xhtml
+cp -r output/php-chunked-xhtml ../resources/
+cd ..
+
+git clone https://github.com/JetBrains/phpstorm-stubs resources/phpstorm-stubs
+```
+
+CI runs unit tests, static analysis, and coding standard checks before building resources and uploading the artifact.
+
+## Build
+
+After resources are ready, run:
+
+```bash
+composer build
+```
+
+This is equivalent to:
+
+```bash
+bin/phpdoc-translator
+```
+
+Default directories:
+
+- `resources/php-chunked-xhtml/`: source Chinese manual XHTML.
+- `resources/annotation/`: intermediate extracted annotation fragments.
+- `resources/phpstorm-stubs/`: source stubs to annotate.
+- `resources/library/`: generated Chinese stub library.
+
+## CLI Usage
+
+```bash
+# Run the full process: parse manual and attach comments
+bin/phpdoc-translator
+
+# Use custom resource directories
+bin/phpdoc-translator --raw-dir resources/php-chunked-xhtml --stubs-dir resources/phpstorm-stubs
+
+# Parse the manual only
+bin/phpdoc-translator --parse-only
+
+# Attach existing annotation fragments only
+bin/phpdoc-translator --attach-only
 
 # Show help
-vendor/bin/phpdoc-translator --help
+bin/phpdoc-translator --help
 ```
 
-### Programmatic Usage
+## Programmatic Usage
 
 ```php
 <?php
@@ -66,117 +126,85 @@ require_once 'vendor/autoload.php';
 
 use IdePhpdocChinese\PhpstormStubsChinese\TranslatorService;
 
-// Initialize the translator service
 $translator = new TranslatorService(
-    'resources/php-chunked-xhtml',  // Raw HTML directory
-    'resources/annotation',         // Temporary annotation directory
-    'resources/phpstorm-stubs',      // PhpStorm stubs directory
-    'resources/library'             // Build library directory
+    'resources/php-chunked-xhtml',
+    'resources/annotation',
+    'resources/phpstorm-stubs',
+    'resources/library'
 );
 
-// Run complete translation
 $translator->translate();
-
-// Or run steps individually
-$translator->parseHtml();        // Parse HTML files
-$translator->attachComments();   // Attach comments to stubs
 ```
 
-### Using Individual Components
+You can also run each stage separately:
 
 ```php
-<?php
-
-use IdePhpdocChinese\PhpstormStubsChinese\Parser\HtmlParser;
-use IdePhpdocChinese\PhpstormStubsChinese\Attached\CommentAttached;
-
-// Parse HTML documentation
-$parser = new HtmlParser('input/php-chunked-xhtml', 'output/annotation');
-$parser->parseAll();
-
-// Attach comments to PHP stubs
-$attached = new CommentAttached('input/annotation', 'output/stubs');
-$attached->attachAll();
+$translator->parseHtml();
+$translator->attachComments();
 ```
 
-## Directory Structure
+## Project Structure
 
-```
+```text
 project/
+├── bin/
+│   └── phpdoc-translator
 ├── src/
 │   ├── Attached/
-│   │   └── CommentAttached.php
+│   │   ├── CommentAttached.php
+│   │   └── DeclarationDetector.php
 │   ├── Exception/
-│   │   └── TranslatorException.php
 │   ├── Parser/
 │   │   └── HtmlParser.php
 │   ├── Util/
 │   │   └── FileHelper.php
 │   └── TranslatorService.php
-├── bin/
-│   └── phpdoc-translator
 ├── tests/
 ├── resources/
-│   ├── php-chunked-xhtml/    # Raw HTML documentation
-│   ├── annotation/           # Temporary annotation files
-│   ├── phpstorm-stubs/       # PhpStorm stub files
-│   └── library/              # Build library directory
+│   ├── php-chunked-xhtml/    # generated or downloaded during build, not committed
+│   ├── annotation/           # intermediate build output, not committed
+│   ├── phpstorm-stubs/       # cloned during build, not committed
+│   └── library/              # final build output, not committed
 ├── composer.json
+├── phpstan.neon
+├── phpunit.xml
 └── README.md
 ```
 
-## Configuration
-
-The package uses the following default directories:
-
-- **Raw HTML Directory**: `resources/php-chunked-xhtml/`
-- **Temporary Directory**: `resources/annotation/`
-- **PhpStorm Stubs Directory**: `resources/phpstorm-stubs/`
-- **Build Library Directory**: `resources/library/`
-
-You can customize these directories using command line options or by configuring the `TranslatorService` programmatically.
-
-## Requirements
-
-- PHP 8.1 or higher
-- ext-dom extension
-- ext-json extension
-- Composer for dependency management
-
-## Development
-
-### Running build
+## Development Commands
 
 ```bash
+# Unit tests
+composer test
+
+# Static analysis
+composer analyse
+
+# Format code
+composer format
+
+# Full build
 composer build
 ```
 
-### Running Tests
+Current tests cover:
 
-```bash
-composer test
-```
+- Mapping PHP stub declarations to php.net manual filenames.
+- Attaching Chinese comments to classes, methods, functions, constants, and superglobals.
+- XHTML fragment parsing, link conversion, and Chinese encoding handling.
 
-## Changelog
+## Build Output
 
-### v1.1.0
-
-- Fixed newline handling and document fragment creation garbled characters in the HTML parser
-
-### v1.0.0
-
-- Initial release
+`resources/library/` is a generated copy of phpstorm-stubs with Chinese documentation fragments inserted into matching declarations. It is large, ignored by default, and usually consumed as a GitHub Actions artifact or by a downstream plugin build.
 
 ## Acknowledgements
 
-- [PHP Manual](https://www.php.net/manual/zh/)
-- [Phpstorm-studs](https://github.com/JetBrains/phpstorm-stubs)
-- [fw6669998/php-doc](https://github.com/fw6669998/php-doc)
+- [PHP Manual Chinese](https://www.php.net/manual/zh/)
+- [php/doc-zh](https://github.com/php/doc-zh)
+- [php/phd](https://github.com/php/phd)
+- [JetBrains/phpstorm-stubs](https://github.com/JetBrains/phpstorm-stubs)
+- [php-chinese-manual-plugin](https://github.com/Hyouka0510/php-chinese-manual-plugin)
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
-
-## Support
-
-For issues and questions, please use the GitHub issue tracker.
+This project is licensed under the MIT License. See `LICENSE` for details.

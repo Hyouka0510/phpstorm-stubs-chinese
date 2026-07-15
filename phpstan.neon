@@ -3,8 +3,6 @@ parameters:
     paths:
         - src
     tmpDir: var/cache/phpstan
-    checkMissingIterableValueType: false
-    checkGenericClassInNonGenericObjectType: false
     reportUnmatchedIgnoredErrors: false
     ignoreErrors:
         - '#Call to an undefined method DOMNode::#'

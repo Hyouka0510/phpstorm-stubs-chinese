@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace IdePhpdocChinese\PhpstormStubsChinese\Parser;
 
 use DOMDocument;
+use DOMElement;
 use DOMNode;
+use DOMNodeList;
 use DOMXPath;
 use IdePhpdocChinese\PhpstormStubsChinese\Exception\ParserException;
 
@@ -15,11 +17,9 @@ use IdePhpdocChinese\PhpstormStubsChinese\Exception\ParserException;
 final class HtmlParser
 {
     private const SITE_URL = 'https://php.net/manual/zh/';
-    private const LINE_BREAK = "\r\n";
 
     public function __construct(private readonly string $inputDir, private readonly string $outputDir)
     {
-
     }
 
     /**
@@ -76,15 +76,10 @@ final class HtmlParser
         $content = $this->loadContent($filename);
         $name    = pathinfo($filename, PATHINFO_FILENAME);
 
-        $dom     = new DOMDocument();
-        $success = @$dom->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-
-        if (!$success) {
-            throw new ParserException("Failed to parse HTML content in file: $filename");
-        }
+        $dom = $this->loadHtmlDocument($content, $filename);
 
         $xpath   = new DOMXPath($dom);
-        $element = $xpath->query("//div[@id='$name']")->item(0);
+        $element = $this->queryOne($xpath, "//div[@id='$name']");
 
         if (!$element) {
             throw new ParserException("Element with id '$name' not found in file: $filename");
@@ -115,24 +110,15 @@ final class HtmlParser
     public function parseConstants(string $filename): void
     {
         $content = $this->loadContent($filename);
-        $dom     = new DOMDocument();
-
-        $success = @$dom->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-        if (!$success) {
-            throw new ParserException("Failed to parse HTML content in file: $filename");
-        }
+        $dom = $this->loadHtmlDocument($content, $filename);
 
         $xpath  = new DOMXPath($dom);
         $prefix = "constant.";
         $query  = "//*[@id[starts-with(., '" . $prefix . "')]]";
-        $nodes  = $xpath->query($query);
-
-        if ($nodes === false) {
-            throw new ParserException("XPath query failed for constants in file: $filename");
-        }
+        $nodes  = $this->query($xpath, $query);
 
         foreach ($nodes as $node) {
-            $codeNode = $xpath->query(".//strong/code", $node)->item(0);
+            $codeNode = $this->queryOne($xpath, ".//strong/code", $node);
             if (!$codeNode) {
                 continue;
             }
@@ -150,7 +136,7 @@ final class HtmlParser
                 continue;
             }
 
-            $simparaNode = $xpath->query(".//*[@class='simpara']", $descriptionNode)->item(0);
+            $simparaNode = $this->queryOne($xpath, ".//*[@class='simpara']", $descriptionNode);
             if (!$simparaNode || $simparaNode->nodeType !== XML_ELEMENT_NODE) {
                 continue;
             }
@@ -188,6 +174,65 @@ final class HtmlParser
     }
 
     /**
+     * @throws ParserException
+     */
+    private function loadHtmlDocument(string $content, string $filename): DOMDocument
+    {
+        $dom = new DOMDocument('1.0', 'UTF-8');
+
+        $previous = libxml_use_internal_errors(true);
+        $success  = $dom->loadHTML(
+            '<?xml encoding="UTF-8">' . $content,
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+        );
+        $errors   = libxml_get_errors();
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        if (!$success) {
+            $message = $errors !== [] ? trim($errors[0]->message) : 'unknown parser error';
+            throw new ParserException("Failed to parse HTML content in file: $filename. Error: $message");
+        }
+
+        return $dom;
+    }
+
+    /**
+     * @return DOMNodeList<DOMNode>
+     * @throws ParserException
+     */
+    private function query(DOMXPath $xpath, string $expression, ?DOMNode $context = null): DOMNodeList
+    {
+        $nodes = $context === null ? $xpath->query($expression) : $xpath->query($expression, $context);
+
+        if ($nodes === false) {
+            throw new ParserException("XPath query failed: $expression");
+        }
+
+        return $nodes;
+    }
+
+    /**
+     * @throws ParserException
+     */
+    private function queryOne(DOMXPath $xpath, string $expression, ?DOMNode $context = null): ?DOMNode
+    {
+        return $this->query($xpath, $expression, $context)->item(0);
+    }
+
+    /**
+     * @throws ParserException
+     */
+    private function ownerDocument(DOMNode $node): DOMDocument
+    {
+        if (!$node->ownerDocument instanceof DOMDocument) {
+            throw new ParserException('DOM node is not attached to a document.');
+        }
+
+        return $node->ownerDocument;
+    }
+
+    /**
      * Get available classes from directory
      * @return array<string, bool>
      * @throws ParserException
@@ -210,7 +255,9 @@ final class HtmlParser
                 }
             }
         } catch (\Exception $e) {
-            throw new ParserException("Unable to scan directory for classes: {$this->inputDir}. Error: " . $e->getMessage());
+            throw new ParserException(
+                "Unable to scan directory for classes: {$this->inputDir}. Error: " . $e->getMessage()
+            );
         }
 
         return $classes;
@@ -233,14 +280,15 @@ final class HtmlParser
      */
     private function modifyUrls(DOMNode $element): void
     {
-        $xpath = new DOMXPath($element->ownerDocument);
-        $links = $xpath->query(".//a", $element);
-
-        if ($links === false) {
-            return;
-        }
+        $document = $this->ownerDocument($element);
+        $xpath    = new DOMXPath($document);
+        $links    = $this->query($xpath, ".//a", $element);
 
         foreach ($links as $link) {
+            if (!$link instanceof DOMElement) {
+                continue;
+            }
+
             $href = $link->getAttribute('href');
 
             if (str_starts_with($href, 'http://') || str_starts_with($href, 'https://')) {
@@ -250,7 +298,7 @@ final class HtmlParser
             $isKnown = str_contains($href, 'function.') || str_contains($link->textContent, '::');
 
             if ($isKnown) {
-                $textNode = $element->ownerDocument->createTextNode('{@link ' . $link->textContent . '}');
+                $textNode = $document->createTextNode('{@link ' . $link->textContent . '}');
                 $link->parentNode?->replaceChild($textNode, $link);
             } else {
                 $href = str_replace('.html', '.php', $href);
@@ -264,7 +312,7 @@ final class HtmlParser
      */
     private function handleStyle(DOMNode $element): void
     {
-        $xpath = new DOMXPath($element->ownerDocument);
+        $xpath = new DOMXPath($this->ownerDocument($element));
 
         // Apply styles to different elements
         $styleMap = [
@@ -287,19 +335,32 @@ final class HtmlParser
     /**
      * Modify attributes for elements matching selector
      */
-    private function modifyAttribute(DOMXPath $xpath, DOMNode $context, string $selector, string $value, string $attribute): void
-    {
-        $className       = ltrim($selector, '.');
-        $xpathExpression = ".//*[contains(concat(' ', normalize-space(@class), ' '), ' $className ')]";
-        $elements        = $xpath->query($xpathExpression, $context);
-
-        if ($elements === false) {
-            return;
-        }
+    private function modifyAttribute(
+        DOMXPath $xpath,
+        DOMNode $context,
+        string $selector,
+        string $value,
+        string $attribute
+    ): void {
+        $elements = $this->query($xpath, $this->selectorToXPath($selector), $context);
 
         foreach ($elements as $element) {
+            if (!$element instanceof DOMElement) {
+                continue;
+            }
+
             $element->setAttribute($attribute, $value);
         }
+    }
+
+    private function selectorToXPath(string $selector): string
+    {
+        if (preg_match('/^\.([A-Za-z0-9_-]+)\s+([A-Za-z0-9_-]+)$/', $selector, $matches)) {
+            return ".//*[contains(concat(' ', normalize-space(@class), ' '), ' {$matches[1]} ')]//{$matches[2]}";
+        }
+
+        $className = ltrim($selector, '.');
+        return ".//*[contains(concat(' ', normalize-space(@class), ' '), ' $className ')]";
     }
 
     /**
@@ -317,32 +378,36 @@ final class HtmlParser
      */
     private function modifyPreElements(DOMXPath $xpath, DOMNode $context): void
     {
-        $preElements = $xpath->query('//pre', $context);
-        if ($preElements === false || $preElements->length === 0) {
+        $preElements = $this->query($xpath, './/pre', $context);
+        if ($preElements->length === 0) {
             return;
         }
 
+        $document = $this->ownerDocument($context);
         foreach ($preElements as $preElement) {
             $parentNode = $preElement->parentNode;
             if (!$parentNode) {
                 continue;
             }
 
-            $newElement = $context->ownerDocument->createElement('blockquote');
+            $newElement = $document->createElement('blockquote');
             $newElement->setAttribute('style', 'border:1px gray solid;');
 
             $preContent = $preElement->textContent;
             if (!empty($preContent)) {
-                $fragment = $context->ownerDocument->createDocumentFragment();
-                $newContent = str_replace(["\r\n", "\n", " "], ["<br>", "<br>", "&nbsp;"], $preContent);
-                $newContent = sprintf('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div>%s</div></body></html>', $newContent);
-                $tempDom    = new DOMDocument();
-                @$tempDom->loadHTML($newContent, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                $fragment   = $document->createDocumentFragment();
+                $newContent = htmlspecialchars($preContent, ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $newContent = str_replace(["\r\n", "\n", " "], ["<br>", "<br>", "&nbsp;"], $newContent);
+                $newContent = sprintf(
+                    '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div>%s</div></body></html>',
+                    $newContent
+                );
+                $tempDom = $this->loadHtmlDocument($newContent, 'generated pre fragment');
 
                 $divElement = $tempDom->getElementsByTagName('div')->item(0);
                 if ($divElement) {
                     foreach ($divElement->childNodes as $node) {
-                        $importedNode = $context->ownerDocument->importNode($node, true);
+                        $importedNode = $document->importNode($node, true);
                         $fragment->appendChild($importedNode);
                     }
                 }
@@ -358,12 +423,17 @@ final class HtmlParser
      */
     private function modifyCodeElements(DOMXPath $xpath, DOMNode $context): void
     {
-        $codeElements = $xpath->query('//code', $context);
-        if ($codeElements === false || $codeElements->length === 0) {
+        $codeElements = $this->query($xpath, './/code', $context);
+        if ($codeElements->length === 0) {
             return;
         }
 
+        $document = $this->ownerDocument($context);
         foreach ($codeElements as $codeElement) {
+            if (!$codeElement instanceof DOMElement) {
+                continue;
+            }
+
             $parentElement = $codeElement->parentNode;
             if (!$parentElement) {
                 continue;
@@ -376,23 +446,33 @@ final class HtmlParser
             }
 
             $newElement = $isPhpCode
-                ? $context->ownerDocument->createElement('blockquote')
-                : $context->ownerDocument->createElement('span');
+                ? $document->createElement('blockquote')
+                : $document->createElement('span');
 
             if ($isPhpCode) {
                 $newElement->setAttribute('style', 'border:1px gray solid;white-space:pre-wrap');
             }
 
             // Copy attributes
-            if ($codeElement->hasAttributes()) {
-                foreach ($codeElement->attributes as $attribute) {
-                    $newElement->setAttribute($attribute->name, $attribute->value);
+            $attributes = $codeElement->attributes;
+            if ($attributes !== null) {
+                foreach ($attributes as $attribute) {
+                    if (!$attribute instanceof DOMNode) {
+                        continue;
+                    }
+
+                    $newElement->setAttribute($attribute->nodeName, $attribute->nodeValue ?? '');
                 }
             }
 
             // Move child nodes
             while ($codeElement->hasChildNodes()) {
-                $newElement->appendChild($codeElement->firstChild);
+                $child = $codeElement->firstChild;
+                if (!$child instanceof DOMNode) {
+                    break;
+                }
+
+                $newElement->appendChild($child);
             }
 
             $parentElement->replaceChild($newElement, $codeElement);
@@ -404,26 +484,30 @@ final class HtmlParser
      */
     private function modifyAbbrElements(DOMXPath $xpath, DOMNode $context): void
     {
-        $abbrElements = $xpath->query('//abbr', $context);
-        if ($abbrElements === false || $abbrElements->length === 0) {
+        $abbrElements = $this->query($xpath, './/abbr', $context);
+        if ($abbrElements->length === 0) {
             return;
         }
+
+        $document = $this->ownerDocument($context);
         foreach ($abbrElements as $abbrElement) {
             $parentNode = $abbrElement->parentNode;
             if (!$parentNode) {
                 continue;
             }
-            $newElement  = $context->ownerDocument->createElement('span');
+            $newElement  = $document->createElement('span');
             $abbrContent = $abbrElement->textContent;
             if (!empty($abbrContent)) {
-                $fragment   = $context->ownerDocument->createDocumentFragment();
-                $newContent = sprintf('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div>%s</div></body></html>', $abbrContent);
-                $tempDom    = new DOMDocument();
-                @$tempDom->loadHTML($newContent, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                $fragment   = $document->createDocumentFragment();
+                $newContent = sprintf(
+                    '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div>%s</div></body></html>',
+                    htmlspecialchars($abbrContent, ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                );
+                $tempDom    = $this->loadHtmlDocument($newContent, 'generated abbr fragment');
                 $divElement = $tempDom->getElementsByTagName('div')->item(0);
                 if ($divElement) {
                     foreach ($divElement->childNodes as $node) {
-                        $importedNode = $context->ownerDocument->importNode($node, true);
+                        $importedNode = $document->importNode($node, true);
                         $fragment->appendChild($importedNode);
                     }
                 }

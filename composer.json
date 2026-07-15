@@ -1,6 +1,6 @@
 {
   "name": "ide-phpdoc-chinese/phpstorm-stubs-chinese",
-  "description": "PHP Manual Chinese Translation Tool - Converts PHP documentation from HTML to Chinese comments for PhpStorm-stubs",
+  "description": "Build Chinese PHP manual comments into JetBrains phpstorm-stubs",
   "type": "library",
   "keywords": [
     "php",

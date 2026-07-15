@@ -1,62 +1,123 @@
-# PhpstormStubs Chinese
+# PhpStorm Stubs Chinese
 
-从PHP官方网站下载HTML版[中文手册](https://www.php.net/download-docs.php)，针对类、函数和常量等核心元素，将其内容分类提取并保存为独立的注释文件。
+PhpStorm Stubs Chinese 是一个用于生成中文 PHP stub 注释库的构建工具。
 
-将注释内容整合到phpstorm-stubs项目中对应的类、函数和常量声明中。
+项目从 PHP 官方文档源码构建中文 `php-chunked-xhtml` 手册，解析其中的类、方法、函数、常量和预定义变量说明，再把对应的中文文档片段附加到 JetBrains `phpstorm-stubs` 的 PHP 声明注释中。最终产物输出到 `resources/library/`，供 [php-chinese-manual-plugin](https://github.com/Hyouka0510/php-chinese-manual-plugin) 等插件或下游构建使用。
 
-将修改后的phpstorm-stubs项目生成并输出到指定文件夹，以便为[php-chinese-manual-plugin](https://github.com/Hyouka0510/php-chinese-manual-plugin)插件的构建使用
+## 功能
 
-## 特性
+- 从中文 PHP 手册 XHTML 中提取可复用的注释片段。
+- 将中文注释匹配并插入到 `phpstorm-stubs` 的类、方法、函数、常量和超全局变量声明前。
+- 支持命名空间类名、魔术方法、下划线函数名、大小写差异等 php.net 手册文件名规则。
+- 提供 CLI 入口和可编程 API。
+- 提供 PHPUnit、PHPStan 和 PHPCS 质量检查。
 
-- **HTML 解析器**：从 HTML 文件中提取 PHP 文档并将其转换为结构化数据
-- **注释附加**：将中文文档注释附加到 phpstorm-stubs中
-- **PSR-4 自动加载**：遵循现代 PHP 标准和最佳实践
-- **命令行界面**：易于使用的控制台命令
-- **错误处理**：全面的异常处理，提供有意义的错误消息
-- **兼容 PHP 8.1+**：支持 PHP 8.1 及更高版本
+## 环境要求
+
+运行本项目自身代码：
+
+- PHP `8.1` 或更高版本
+- Composer
+- PHP 扩展：`dom`、`json`、`libxml`
+
+完整生成 `resources/php-chunked-xhtml/` 时还需要：
+
+- Git
+- PHP 扩展：`xmlreader`、`sqlite3`
+- 可访问 GitHub，用于克隆 `php/phd`、`php/doc-base`、`php/doc-en`、`php/doc-zh` 和 `JetBrains/phpstorm-stubs`
+
+开发和质量检查还需要：
+
+- PHP 扩展：`zip`
+- `phpunit/phpunit`
+- `phpstan/phpstan`
+- `squizlabs/php_codesniffer`
+
+这些开发依赖由 `composer install` 安装。
 
 ## 安装
 
-通过 Composer 安装此包：
+```bash
+git clone https://github.com/Hyouka0510/phpstorm-stubs-chinese.git
+cd phpstorm-stubs-chinese
+composer install
+```
+
+如果只在 CI 或生产构建中运行生成流程，可使用：
 
 ```bash
-composer require phpdoc/translator
+composer install --no-dev --prefer-dist
 ```
 
-或者将其添加到您的 `composer.json`：
+## 资源准备
 
-```json
-{
-  "require": {
-    "phpdoc/translator": "^1.0"
-  }
-}
-```
+本仓库不提交大型资源目录，以下目录需要在构建前准备：
 
-## 使用
+- `resources/php-chunked-xhtml/`：PHP 中文手册 XHTML。
+- `resources/phpstorm-stubs/`：JetBrains `phpstorm-stubs` 源码。
 
-### 命令行界面
-
-该包提供了一个控制台命令，方便使用：
+CI 工作流 `.github/workflows/main.yml` 会自动准备这些资源：
 
 ```bash
-# 运行完整的翻译过程
-vendor/bin/phpdoc-translator
+mkdir -p resources php-doc
 
-# 使用自定义目录运行
-vendor/bin/phpdoc-translator --raw-dir /resources/php-chunked-xhtml --stubs-dir /resources/phpstorm-stubs
+git clone https://github.com/php/phd php-doc/phd
+git clone https://github.com/php/doc-base php-doc/doc-base
+git clone https://github.com/php/doc-en php-doc/en
+git clone https://github.com/php/doc-zh php-doc/zh
 
-# 仅运行解析器
-vendor/bin/phpdoc-translator --parse-only
+cd php-doc
+php doc-base/configure.php --with-lang=zh
+php phd/render.php --docbook doc-base/.manual.xml --package PHP --format xhtml
+cp -r output/php-chunked-xhtml ../resources/
+cd ..
 
-# 仅运行附加
-vendor/bin/phpdoc-translator --attach-only
-
-# 显示帮助
-vendor/bin/phpdoc-translator --help
+git clone https://github.com/JetBrains/phpstorm-stubs resources/phpstorm-stubs
 ```
 
-### 编程方式使用
+CI 会先执行单元测试、静态分析和编码规范检查，全部通过后才会进入资源构建和 artifact 上传阶段。
+
+## 构建
+
+资源准备完成后运行：
+
+```bash
+composer build
+```
+
+等价于：
+
+```bash
+bin/phpdoc-translator
+```
+
+默认输入和输出目录：
+
+- `resources/php-chunked-xhtml/`：原始中文手册 XHTML。
+- `resources/annotation/`：解析出来的中间注释片段。
+- `resources/phpstorm-stubs/`：待附加中文注释的 stub 源码。
+- `resources/library/`：最终生成的中文 stub 库。
+
+## CLI 使用
+
+```bash
+# 运行完整流程：解析手册并附加注释
+bin/phpdoc-translator
+
+# 自定义资源目录
+bin/phpdoc-translator --raw-dir resources/php-chunked-xhtml --stubs-dir resources/phpstorm-stubs
+
+# 只解析中文手册到 resources/annotation
+bin/phpdoc-translator --parse-only
+
+# 只把现有 resources/annotation 附加到 stubs
+bin/phpdoc-translator --attach-only
+
+# 查看帮助
+bin/phpdoc-translator --help
+```
+
+## 编程方式使用
 
 ```php
 <?php
@@ -65,118 +126,85 @@ require_once 'vendor/autoload.php';
 
 use IdePhpdocChinese\PhpstormStubsChinese\TranslatorService;
 
-// 初始化翻译服务
 $translator = new TranslatorService(
-    'resources/php-chunked-xhtml',  // 原始 HTML 目录
-    'resources/annotation',         // 临时注释目录
-    'resources/phpstorm-stubs',      // PhpStorm 存根目录
-    'resources/library'             // 构建库目录
+    'resources/php-chunked-xhtml',
+    'resources/annotation',
+    'resources/phpstorm-stubs',
+    'resources/library'
 );
 
-// 运行完整翻译
 $translator->translate();
-
-// 或者单独运行步骤
-$translator->parseHtml();        // 解析 HTML 文件
-$translator->attachComments();   // 将注释附加到存根
 ```
 
-### 使用独立组件
+也可以单独运行两个阶段：
 
 ```php
-<?php
-
-use IdePhpdocChinese\PhpstormStubsChinese\Parser\HtmlParser;
-use IdePhpdocChinese\PhpstormStubsChinese\Attached\CommentAttached;
-
-// 解析 HTML 文档
-$parser = new HtmlParser('input/php-chunked-xhtml', 'output/annotation');
-$parser->parseAll();
-
-// 将注释附加到 PHP 存根
-$attached = new CommentAttached('input/annotation', 'output/stubs');
-$attached->attachAll();
+$translator->parseHtml();
+$translator->attachComments();
 ```
 
-## 目录结构
+## 项目结构
 
-```
+```text
 project/
+├── bin/
+│   └── phpdoc-translator
 ├── src/
 │   ├── Attached/
-│   │   └── CommentAttached.php
+│   │   ├── CommentAttached.php
+│   │   └── DeclarationDetector.php
 │   ├── Exception/
-│   │   └── TranslatorException.php
 │   ├── Parser/
 │   │   └── HtmlParser.php
 │   ├── Util/
 │   │   └── FileHelper.php
 │   └── TranslatorService.php
-├── bin/
-│   └── phpdoc-translator
 ├── tests/
 ├── resources/
-│   ├── php-chunked-xhtml/    # 原始 HTML 文档
-│   ├── annotation/           # 临时注释文件
-│   ├── phpstorm-stubs/       # PhpStorm 存根文件
-│   └── library/              # 构建库目录
+│   ├── php-chunked-xhtml/    # 构建时生成或下载，不提交
+│   ├── annotation/           # 构建中间产物，不提交
+│   ├── phpstorm-stubs/       # 构建时克隆，不提交
+│   └── library/              # 最终构建产物，不提交
 ├── composer.json
+├── phpstan.neon
+├── phpunit.xml
 └── README.md
 ```
 
-## 配置
-
-该包使用以下默认目录：
-
-- **原始 HTML 目录**：`resources/php-chunked-xhtml/`
-- **临时目录**：`resources/annotation/`
-- **PhpStorm 存根目录**：`resources/phpstorm-stubs/`
-- **构建库目录**：`resources/library/`
-
-您可以通过命令行选项或通过编程方式配置 `TranslatorService` 来自定义这些目录。
-
-## 要求
-
-- PHP 8.1 或更高版本
-- ext-dom 扩展
-- ext-json 扩展
-- Composer 用于依赖管理
-
-## 开发
-
-### 运行构建
+## 开发命令
 
 ```bash
+# 单元测试
+composer test
+
+# 静态分析
+composer analyse
+
+# 代码格式修复
+composer format
+
+# 完整构建
 composer build
 ```
 
-### 运行测试
+当前测试覆盖重点：
 
-```bash
-composer test
-```
+- PHP stub 声明到 php.net 手册文件名的映射规则。
+- 中文注释附加到类、方法、函数、常量和超全局变量。
+- XHTML 片段解析、链接转换和中文编码处理。
 
-## 更新日志
+## 产物说明
 
-### v1.1.0
-
-- 修复HTML解析器中的换行符处理和文档片段创建乱码
-
-### v1.0.0
-
-- 首次发布
+`resources/library/` 是生成后的 phpstorm-stubs 副本，其中匹配到中文手册的声明会在原有注释中插入中文文档片段。该目录体积较大，默认由 `.gitignore` 忽略，通常通过 GitHub Actions artifact 或下游插件构建流程消费。
 
 ## 鸣谢
 
-- [PHP 手册中文版](https://www.php.net/manual/zh/)
-- [Phpstorm-studs](https://github.com/JetBrains/phpstorm-stubs)
-- [fw6669998/php-doc](https://github.com/fw6669998/php-doc)
+- [PHP 中文手册](https://www.php.net/manual/zh/)
+- [php/doc-zh](https://github.com/php/doc-zh)
+- [php/phd](https://github.com/php/phd)
+- [JetBrains/phpstorm-stubs](https://github.com/JetBrains/phpstorm-stubs)
+- [php-chinese-manual-plugin](https://github.com/Hyouka0510/php-chinese-manual-plugin)
 
 ## 许可证
 
-本项目采用 MIT 许可证。详情请参阅 LICENSE 文件。
-
-## 支持
-
-如有问题和疑问，请使用 GitHub 问题跟踪器。
-
+本项目采用 MIT 许可证，详见 `LICENSE`。

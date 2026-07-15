@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace IdePhpdocChinese\PhpstormStubsChinese\Util;
 
 use IdePhpdocChinese\PhpstormStubsChinese\Exception\FileHelperException;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
 
 /**
  * File Helper Utility
@@ -16,24 +19,31 @@ final class FileHelper
      * @return array<string>
      * @throws FileHelperException
      */
-    public static function getPhpFiles(string $directory, string $parent = ''): array
+    public static function getPhpFiles(string $directory): array
     {
+        self::ensureReadableDirectory($directory);
+
         $files = [];
 
         try {
-            $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS),
-                \RecursiveIteratorIterator::LEAVES_ONLY
+            $normalizedDirectory = rtrim($directory, '/\\') . DIRECTORY_SEPARATOR;
+            $iterator            = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::LEAVES_ONLY
             );
 
             foreach ($iterator as $file) {
-                /** @var \SplFileInfo $file */
-                if ($file->isFile()) {
-                    $normalizedDirectory = rtrim($directory, '/\\') . DIRECTORY_SEPARATOR;
-                    $relativePath        = str_replace($normalizedDirectory, '', $file->getPathname());
-                    $relativePath        = str_replace(DIRECTORY_SEPARATOR, '/', $relativePath);
-                    $files[]             = '/' . $relativePath;
+                if (!$file instanceof SplFileInfo || !$file->isFile()) {
+                    continue;
                 }
+
+                if ($file->getExtension() !== 'php') {
+                    continue;
+                }
+
+                $relativePath = str_replace($normalizedDirectory, '', $file->getPathname());
+                $relativePath = str_replace(DIRECTORY_SEPARATOR, '/', $relativePath);
+                $files[]      = '/' . $relativePath;
             }
         } catch (\Exception $e) {
             throw new FileHelperException("Unable to scan directory: $directory. Error: " . $e->getMessage());
@@ -56,11 +66,94 @@ final class FileHelper
     }
 
     /**
+     * Ensure directory exists and can be read.
+     * @throws FileHelperException
+     */
+    public static function ensureReadableDirectory(string $directory): void
+    {
+        if (!is_dir($directory)) {
+            throw new FileHelperException("Directory does not exist: $directory");
+        }
+
+        if (!is_readable($directory)) {
+            throw new FileHelperException("Directory is not readable: $directory");
+        }
+    }
+
+    /**
+     * Remove a generated directory after rejecting dangerous paths.
+     * @throws FileHelperException
+     */
+    public static function removeDirectory(string $directory): void
+    {
+        if (!is_dir($directory)) {
+            return;
+        }
+
+        self::assertSafeDirectoryForRemoval($directory);
+
+        try {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::CHILD_FIRST
+            );
+
+            foreach ($iterator as $file) {
+                if (!$file instanceof SplFileInfo) {
+                    continue;
+                }
+
+                if ($file->isDir()) {
+                    if (!rmdir($file->getPathname())) {
+                        throw new FileHelperException("Unable to remove directory: " . $file->getPathname());
+                    }
+                    continue;
+                }
+
+                if (!unlink($file->getPathname())) {
+                    throw new FileHelperException("Unable to delete file: " . $file->getPathname());
+                }
+            }
+        } catch (FileHelperException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            throw new FileHelperException("Unable to remove directory: $directory. Error: " . $e->getMessage());
+        }
+
+        if (!rmdir($directory)) {
+            throw new FileHelperException("Unable to remove directory: $directory");
+        }
+    }
+
+    /**
+     * @throws FileHelperException
+     */
+    private static function assertSafeDirectoryForRemoval(string $directory): void
+    {
+        $realPath = realpath($directory);
+        if ($realPath === false) {
+            throw new FileHelperException("Unable to resolve directory: $directory");
+        }
+
+        $normalized = rtrim(str_replace('\\', '/', $realPath), '/');
+        if ($normalized === '' || $normalized === '/') {
+            throw new FileHelperException("Refusing to remove unsafe directory: $directory");
+        }
+
+        $projectRoot = getcwd();
+        $projectRoot = $projectRoot !== false ? realpath($projectRoot) : false;
+
+        if ($projectRoot !== false && $realPath === $projectRoot) {
+            throw new FileHelperException("Refusing to remove project root: $directory");
+        }
+    }
+
+    /**
      * Get file extension
      */
     public static function getExtension(string $filename): string
     {
-        return pathinfo($filename, PATHINFO_EXTENSION) ?? '';
+        return pathinfo($filename, PATHINFO_EXTENSION);
     }
 
     /**
@@ -68,7 +161,7 @@ final class FileHelper
      */
     public static function getFilenameWithoutExtension(string $filename): string
     {
-        return pathinfo($filename, PATHINFO_FILENAME) ?? '';
+        return pathinfo($filename, PATHINFO_FILENAME);
     }
 
     /**

@@ -16,8 +16,6 @@ use IdePhpdocChinese\PhpstormStubsChinese\Util\FileHelper;
 final class CommentAttached
 {
     private const LINE_BREAK = "\n";
-    private const COMMENT_PREFIXES = ['/*', '*', '*/', '#'];
-    private const PS_UNRESERVE_PREFIX = 'PS_UNRESERVE_PREFIX_';
     private const MANUAL_URL_PATTERN = '/(\/\/php\.net\/manual\/en)/';
     private const MANUAL_URL_REPLACEMENT = '//php.net/manual/zh';
     private const EXTENSION_PHP = 'php';
@@ -73,27 +71,25 @@ final class CommentAttached
      */
     private function processFileContent(string $content): string
     {
-        $lines     = explode(self::LINE_BREAK, $content);
-        $newLines  = [];
-        $comment   = '';
-        $className = '';
+        $lines    = explode(self::LINE_BREAK, $content);
+        $newLines = [];
+        $comment  = '';
+        $detector = new DeclarationDetector();
 
         foreach ($lines as $line) {
-            $trimmedLine = str_replace(' ', '', $line);
-            // Handle comments
-            if ($this->isComment($trimmedLine)) {
+            if ($this->isCommentLine($line)) {
                 $comment .= $line . self::LINE_BREAK;
                 continue;
             }
-            // Process different types of declarations
-            $newComment = $this->processDeclarations($line, $comment, $className);
+
+            $documentationKey = $detector->detect($line);
+            $newComment       = $documentationKey !== null ? $this->getComment($documentationKey, $comment) : null;
 
             if ($newComment !== null) {
                 $newLines[] = rtrim($newComment, self::LINE_BREAK);
                 $comment    = '';
             }
 
-            // Add any remaining comment
             if (!empty($comment)) {
                 $newLines[] = rtrim($comment, self::LINE_BREAK);
                 $comment    = '';
@@ -103,43 +99,6 @@ final class CommentAttached
         }
 
         return implode(self::LINE_BREAK, $newLines);
-    }
-
-    /**
-     * Process different types of declarations (class, function, constant, variable)
-     *
-     * @param string $line Current line
-     * @param string $comment Current comment block
-     * @param string &$className Current class name (passed by reference)
-     * @return string|null New comment or null if no declaration found
-     */
-    private function processDeclarations(string $line, string $comment, string &$className): ?string
-    {
-        // Handle class declarations
-        if ($detectedClass = $this->detectClass($line)) {
-            $className = $detectedClass;
-            return $this->getComment("class.{$className}", $comment);
-        }
-
-        // Handle function declarations
-        if ($function = $this->detectFunction($line)) {
-            $function    = $this->normalizeFunction($function);
-            $isMethod    = $this->isMethodDeclaration($line, $className);
-            $functionKey = $isMethod ? "{$className}.{$function}" : "function.{$function}";
-            return $this->getComment($functionKey, $comment);
-        }
-
-        // Handle constant declarations
-        if ($constant = $this->detectConstant($line)) {
-            return $this->getComment("constant.{$constant}", $comment);
-        }
-
-        // Handle variable declarations
-        if ($variable = $this->detectVariable($line)) {
-            return $this->getComment("reserved.variables.{$variable}", $comment);
-        }
-
-        return null;
     }
 
     /**
@@ -203,10 +162,12 @@ final class CommentAttached
     }
 
     /**
-     * Check if a line is a comment
+     * Check if a line belongs to a PHPDoc or stub comment block.
      */
-    private function isComment(string $line): bool
+    private function isCommentLine(string $line): bool
     {
+        $line = ltrim($line);
+
         return match (true) {
             str_starts_with($line, '/*'),
             str_starts_with($line, '*'),
@@ -217,103 +178,10 @@ final class CommentAttached
     }
 
     /**
-     * Detect class declaration
-     */
-    private function detectClass(string $line): ?string
-    {
-        return $this->detectElement($line, 'class');
-    }
-
-    /**
-     * Detect function declaration
-     */
-    private function detectFunction(string $line): ?string
-    {
-        return $this->detectElement($line, 'function');
-    }
-
-    /**
-     * Detect constant declaration
-     */
-    private function detectConstant(string $line): ?string
-    {
-        $line   = str_replace(' ', '', $line);
-        $prefix = "define('";
-
-        if (!str_starts_with($line, $prefix)) {
-            return null;
-        }
-
-        $line  = str_replace($prefix, '', $line);
-        $parts = explode("'", $line);
-        return $parts[0] ?? null;
-    }
-
-    /**
-     * Detect variable declaration
-     */
-    private function detectVariable(string $line): ?string
-    {
-        $line = str_replace(' ', '', $line);
-
-        if (!str_starts_with($line, '$')) {
-            return null;
-        }
-
-        $line  = str_replace(['$', '_'], '', $line);
-        $parts = explode('=', $line);
-        return $parts[0] ?? null;
-    }
-
-    /**
-     * Detect elements (class, function, etc.)
-     */
-    private function detectElement(string $line, string $type): ?string
-    {
-        $tokens = explode(' ', $line);
-
-        for ($i = 0, $count = count($tokens); $i < $count; $i++) {
-            if ($tokens[$i] === $type && isset($tokens[$i + 1])) {
-                $name = trim($tokens[$i + 1]);
-                // Remove function parameters if present
-                if (($pos = strpos($name, '(')) !== false) {
-                    $name = substr($name, 0, $pos);
-                }
-                return $name;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Normalize function name by removing PS_UNRESERVE_PREFIX
-     */
-    private function normalizeFunction(string $function): string
-    {
-        return str_starts_with($function, self::PS_UNRESERVE_PREFIX)
-            ? substr($function, strlen(self::PS_UNRESERVE_PREFIX))
-            : $function;
-    }
-
-    /**
-     * Check if this is a method declaration (inside a class)
-     */
-    private function isMethodDeclaration(string $line, string $className): bool
-    {
-        return str_starts_with($line, ' ') && !empty($className);
-    }
-
-    /**
-     * Get comment for a specific token
+     * Get comment for a specific manual token.
      */
     private function getComment(string $token, string $oldComment): string
     {
-        // Don't replace underscores for constants
-        if (!str_starts_with($token, 'constant.')) {
-            $token = str_replace('_', '-', $token);
-        }
-
         $file = $this->documentDir . $token . '.html';
 
         if (!file_exists($file)) {
@@ -324,11 +192,10 @@ final class CommentAttached
         if ($comment === false) {
             return $oldComment;
         }
-        // Process comment Unicode and $
         $comment = $this->processCommentUnicode($comment);
-        // Process old comment
+
         $processedOldComment = $this->processOldCommentUrls($oldComment);
-        // Build new comment
+
         return $this->buildNewComment($comment, $processedOldComment);
     }
 
@@ -340,9 +207,8 @@ final class CommentAttached
         if (empty($comment)) {
             return '';
         }
-        //echo $comment;die;
-        //&#36;
-        return str_replace(["\u{00A0}", "$"], ["&nbsp;", '\$'], $comment);
+
+        return str_replace(["\u{00A0}", '$'], ["&nbsp;", '\$'], $comment);
     }
 
     /**
@@ -359,19 +225,18 @@ final class CommentAttached
 
     /**
      * Build new comment block
-     * @throws AttachedException
      */
     private function buildNewComment(string $comment, string $oldComment): string
     {
         $pattern = '/(\/\*\*)\s*(\n|\r\n|\r)/';
         if (preg_match($pattern, $oldComment, $matches, PREG_OFFSET_CAPTURE)) {
-            $matchStart              = $matches[0][1] ?? 0;
-            $matchLength             = strlen($matches[0][0] ?? '');
+            $matchStart              = $matches[0][1];
+            $matchLength             = strlen($matches[0][0]);
             $insertPosition          = $matchStart + $matchLength;
             $contentToAddWithNewline = " * " . rtrim($comment) . self::LINE_BREAK . " * " . self::LINE_BREAK;
             return substr_replace($oldComment, $contentToAddWithNewline, $insertPosition, 0);
-        } else {
-            return "/**" . self::LINE_BREAK . " * " . rtrim($comment) . self::LINE_BREAK . " */" . self::LINE_BREAK;
         }
+
+        return "/**" . self::LINE_BREAK . " * " . rtrim($comment) . self::LINE_BREAK . " */" . self::LINE_BREAK;
     }
 }
