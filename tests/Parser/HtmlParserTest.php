@@ -26,7 +26,11 @@ final class HtmlParserTest extends TestCase
     public function testParsesFunctionDocumentationFragment(): void
     {
         $html = '<div id="function.str-replace"><p class="para">替换 '
-            . '<a href="function.count.html">count()</a></p><pre>$a = 1;</pre></div>';
+            . '<a href="function.count.html">count()</a></p><pre><code style="color: #000000">'
+            . '<span style="color: #0000BB">&lt;?php' . "\n" . '$a </span>'
+            . '<span style="color: #007700">= </span>'
+            . '<span style="color: #DD0000">1</span>'
+            . '</code></pre></div>';
 
         file_put_contents(
             $this->root . '/input/function.str-replace.html',
@@ -42,6 +46,10 @@ final class HtmlParserTest extends TestCase
         self::assertStringContainsString('替换', $output);
         self::assertStringContainsString('{@link count()}', $output);
         self::assertStringContainsString("\u{00A0}", $output);
+        self::assertStringContainsString('<br>', $output);
+        self::assertStringContainsString('<span style="color: #9876AA">', $output);
+        self::assertStringContainsString('<span style="color: #007700">', $output);
+        self::assertStringContainsString('<span style="color: #DD0000">1</span>', $output);
     }
 
     public function testParsesConstantsFromDocumentationPage(): void

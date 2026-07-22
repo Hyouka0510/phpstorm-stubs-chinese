@@ -393,28 +393,45 @@ final class HtmlParser
             $newElement = $document->createElement('blockquote');
             $newElement->setAttribute('style', 'border:1px gray solid;');
 
-            $preContent = $preElement->textContent;
-            if (!empty($preContent)) {
-                $fragment   = $document->createDocumentFragment();
-                $newContent = htmlspecialchars($preContent, ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                $newContent = str_replace(["\r\n", "\n", " "], ["<br>", "<br>", "&nbsp;"], $newContent);
-                $newContent = sprintf(
-                    '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div>%s</div></body></html>',
-                    $newContent
-                );
-                $tempDom = $this->loadHtmlDocument($newContent, 'generated pre fragment');
-
-                $divElement = $tempDom->getElementsByTagName('div')->item(0);
-                if ($divElement) {
-                    foreach ($divElement->childNodes as $node) {
-                        $importedNode = $document->importNode($node, true);
-                        $fragment->appendChild($importedNode);
-                    }
-                }
-                $newElement->appendChild($fragment);
+            foreach (iterator_to_array($preElement->childNodes) as $childNode) {
+                $newElement->appendChild($childNode->cloneNode(true));
             }
+            $this->formatPreformattedText($xpath, $newElement);
 
             $parentNode->replaceChild($newElement, $preElement);
+        }
+    }
+
+    /**
+     * Preserve syntax-highlighting elements while making preformatted whitespace render in PHPDoc HTML.
+     */
+    private function formatPreformattedText(DOMXPath $xpath, DOMNode $context): void
+    {
+        $document = $this->ownerDocument($context);
+        $textNodes = iterator_to_array($this->query($xpath, './/text()', $context));
+
+        foreach ($textNodes as $textNode) {
+            $parentNode = $textNode->parentNode;
+            if (!$parentNode) {
+                continue;
+            }
+
+            $fragment = $document->createDocumentFragment();
+            $lines = preg_split('/\r\n|\r|\n/', $textNode->nodeValue ?? '');
+            if ($lines === false) {
+                continue;
+            }
+
+            foreach ($lines as $index => $line) {
+                if ($index > 0) {
+                    $fragment->appendChild($document->createElement('br'));
+                }
+                if ($line !== '') {
+                    $fragment->appendChild($document->createTextNode(str_replace(' ', "\u{00A0}", $line)));
+                }
+            }
+
+            $parentNode->replaceChild($fragment, $textNode);
         }
     }
 
